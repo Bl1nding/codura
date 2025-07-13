@@ -21,4 +21,5 @@ public class RequestBodyBaseOpenAI extends RequestBodyBase {
     private String stop;
     @JsonProperty(value = "temperature")
     private double temperature=0.2;
+
 }

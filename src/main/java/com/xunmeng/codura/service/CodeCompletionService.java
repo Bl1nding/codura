@@ -38,6 +38,7 @@ import com.xunmeng.codura.pojo.ConversationMessage;
 import com.xunmeng.codura.pojo.PrefixSuffix;
 import com.xunmeng.codura.setting.provider.CompletionConfigProvider;
 import com.xunmeng.codura.setting.provider.FimModelProvider;
+import com.xunmeng.codura.setting.provider.LlmGateConfigProvider;
 import com.xunmeng.codura.setting.state.CodeStateService;
 import com.xunmeng.codura.status.CodeStatus;
 import com.xunmeng.codura.status.CodeStatusService;
@@ -47,10 +48,12 @@ import com.xunmeng.codura.system.logs.pojo.AIUsageLog;
 import com.xunmeng.codura.utils.*;
 import okhttp3.Call;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.lucene.analysis.ro.RomanianAnalyzer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -64,7 +67,8 @@ import static com.xunmeng.codura.constants.Constants.*;
  */
 @Service
 public final class CodeCompletionService {
-    // 配置
+
+    private String requestId;    // 配置
     private Call call;
 
     // 上次补全接受状态
@@ -146,7 +150,7 @@ public final class CodeCompletionService {
     private Editor editor;
 
 
-    private CompletionConfigProvider completionConfigProvider = CodeStateService.settings().getCompletionConfigProvider();
+    private CompletionConfigProvider completionConfigProvider ;
 
     /*日志对象*/
     private AIUsageLog commpletionLog = null;
@@ -154,6 +158,7 @@ public final class CodeCompletionService {
     private String inputPrompt = "";
 
     public void provideInlineCompletionItems(Editor editor, DataContext dataContext) {
+        completionConfigProvider = RemoteConfigService.fetchCompletionConfigCached();
         this.document = editor.getDocument();
         this.editor = editor;
         // 判断上一次补全状态是否被接受,并判断是否开启了连续补全
@@ -216,7 +221,7 @@ public final class CodeCompletionService {
     }
 
     private boolean isChatCompletion() {
-        FimModelProvider provider = getProvider();
+        FimModelProvider provider = RemoteConfigService.getFimModelProviderCached();
         if (provider.getFimTemplateType() != null && provider.getFimTemplateType() == FimTemplateType.USECHAT) {
             return true;
         } else {
@@ -227,7 +232,7 @@ public final class CodeCompletionService {
     private void doInlineCompletion(String prompt) {
         lock.lock();// 获取锁
         try {
-            FimModelProvider provider = getProvider();
+            FimModelProvider provider = RemoteConfigService.getFimModelProviderCached();
             if (provider == null) return;
             StreamResquest request = buildStreamRequest(prompt, provider);
             SSEHttpClient sseHttpClient = new SSEHttpClient(request);
@@ -245,6 +250,11 @@ public final class CodeCompletionService {
         requestBody.setMax_tokens(completionConfigProvider.getNumPredictFim());
         requestBody.setTemperature(completionConfigProvider.getTemperature());
         requestBody.setPrompt(prompt);
+
+        //标记请求
+        requestId = UUID.randomUUID().toString();
+        requestBody.setRequestId(requestId);
+
         RequestOptions options = new RequestOptions();
         options.setHostname(provider.getHostName())
                 .setProtocol(provider.getProtocol().V().toString())
@@ -273,13 +283,22 @@ public final class CodeCompletionService {
         requestBody.setModel(modelName.V().toString());
         requestBody.setMax_tokens(completionConfigProvider.getNumPredictFim());
         requestBody.setTemperature(completionConfigProvider.getTemperature());
+
+        //标记请求
+        requestId = UUID.randomUUID().toString();
+        requestBody.setRequestId(requestId);
+        //获取网关配置
+        LlmGateConfigProvider llmgate = RemoteConfigService.fetchLlmGateConfigCached();
+        int port = llmgate.getServer().getPort();
+        String path = llmgate.getServer().getPrefix()+ provider.getPath();
         RequestOptions options = new RequestOptions();
         options.setHostname(provider.getHostName())
                 .setProtocol(provider.getProtocol().V().toString())
-                .setPort(provider.getPort())
-                .setPath(provider.getPath())
+                .setPort(port)
+                .setPath(path)
                 .setMethod(Method.POST)
-                .addHeader("Content-Type", "application/json");
+                .addHeader("Content-Type","application/json");
+
         if (!StringUtils.isEmpty(provider.getApiKey())) {
             options.addHeader("Authorization", "Bearer %s".formatted(provider.getApiKey()));
         }
@@ -343,12 +362,12 @@ public final class CodeCompletionService {
 
             @Override
             public void onError(Throwable throwable) {
-                logger.error(throwable);
-                if (call != null) {
+//                logger.error(throwable);
+                if (call != null && !call.isCanceled()) {
                     call.cancel();
                 }
                 codeAlienOnError(throwable.getMessage());
-                NotifyUtils.error(throwable.getMessage());
+//                NotifyUtils.error(throwable.getMessage());
                 ApplicationManager.getApplication().invokeLater(() -> {
                     clearRender();
                 });
@@ -357,7 +376,7 @@ public final class CodeCompletionService {
     }
 
     private String onCompletionData(String data) {
-        FimModelProvider provider = getProvider();
+        FimModelProvider provider = RemoteConfigService.getFimModelProviderCached();
         if (provider == null) return "";
         try {
             // 处理接受到的数据
@@ -436,7 +455,7 @@ public final class CodeCompletionService {
 
 
     private String getPrompt(PrefixSuffix prefixSuffix) {
-        FimModelProvider provider = getProvider();
+        FimModelProvider provider = RemoteConfigService.getFimModelProviderCached();
         if (provider == null || document == null || position == null) {
             return "";
         }
@@ -463,7 +482,7 @@ public final class CodeCompletionService {
     }
 
     private FimModelProvider getProvider() {
-        FimModelProvider fimModelProvider = CodeStateService.settings().getFimModelProvider();
+        FimModelProvider fimModelProvider = RemoteConfigService.getFimModelProviderCached();
         return fimModelProvider;
     }
 
@@ -555,7 +574,7 @@ public final class CodeCompletionService {
 
         try {
             if (formattedCompletion != null && !formattedCompletion.equals("")) {
-                LogExecutor.me().aiuse(AIUsageType.CODE_COMPLETION, conversationMessageList, formattedCompletion);
+                LogExecutor.me().aiuse(AIUsageType.CODE_COMPLETION, conversationMessageList, formattedCompletion,requestId);
             }
         } finally {
             // 渲染内容

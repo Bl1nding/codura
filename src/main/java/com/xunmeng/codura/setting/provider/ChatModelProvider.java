@@ -1,5 +1,6 @@
 package com.xunmeng.codura.setting.provider;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.xunmeng.codura.constants.Constants;
 import com.xunmeng.codura.constants.enums.ModeType;
 import com.xunmeng.codura.constants.enums.OpenApiType;
@@ -11,6 +12,7 @@ import lombok.EqualsAndHashCode;
 
 @Data
 @EqualsAndHashCode(callSuper=true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ChatModelProvider extends ModelProvider{
     public static ChatModelProvider defaultProvider() {
         ChatModelProvider chatModelProvider = new ChatModelProvider();

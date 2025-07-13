@@ -6,7 +6,7 @@ function resolve(dir) {
   return path.join(__dirname, dir)
 }
 // 请求基础路径
-process.env.VUE_APP_BASE_API="http://localhost:8080"
+process.env.VUE_APP_BASE_API="http://localhost:8079"
 process.env.VUE_APP_BOFRE_API="http://localhost:8081"
 process.env.VUE_APP_NAME="Codura"
 module.exports = defineConfig({
