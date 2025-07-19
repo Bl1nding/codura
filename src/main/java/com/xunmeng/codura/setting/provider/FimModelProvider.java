@@ -21,7 +21,7 @@ public class FimModelProvider extends ModelProvider{
         provider.setLabel("代码补全模型-CodeQwen");
         provider.setType(ProviderType.FIM);
         provider.setOpenApiType(OpenApiType.OPENAI);
-        provider.setModelName(ModeType.GPT_4_O_MINI);
+        provider.setModelName("gpt-3.5-turbo");
         provider.setHostName(Constants.HOST);
         provider.setProtocol(ProtocolType.HTTP);
         provider.setPort(Constants.PORT);

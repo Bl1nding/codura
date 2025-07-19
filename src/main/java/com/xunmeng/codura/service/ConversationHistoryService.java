@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.intellij.openapi.components.Service;
 import com.xunmeng.codura.call.CallBack;
 import com.xunmeng.codura.constants.Constants;
-import com.xunmeng.codura.constants.enums.ModeType;
 import com.xunmeng.codura.net.SSEHttpClient;
 import com.xunmeng.codura.net.constants.Method;
 import com.xunmeng.codura.net.options.RequestOptions;
@@ -44,8 +43,8 @@ public final class ConversationHistoryService {
         StreamRequestBodyChatOpenAI requestBody = new StreamRequestBodyChatOpenAI(messageList);
         ChatModelProvider provider= codeState.getChatModelProvider();
         ChatConfigProvider chatConfigProvider = codeState.getChatConfigProvider();
-        ModeType modelName = provider.getModelName();
-        requestBody.setModel(modelName.V().toString());
+        String modelName = provider.getModelName();
+        requestBody.setModel(modelName);
         requestBody.setMax_tokens(100);
         requestBody.setTemperature(chatConfigProvider.getTemperature());
 

@@ -175,7 +175,19 @@ export default {
     getUserConfig(userName) {
       getConfigByUserName(userName).then(res => {
         const data = res.data || [];
-        this.applyConfigList(data);
+        if (userName === 'admin') {
+          // 是 admin 配置：clone 一份给当前用户用
+          const cloned = data.map(item => {
+            return {
+              ...item,
+              id: null, // 保证保存时会 insert
+              userName: this.$store.state.user.name // 属于当前用户
+            };
+          });
+          this.applyConfigList(cloned);
+        } else {
+          this.applyConfigList(data);
+        }
       });
     },
 
@@ -187,7 +199,7 @@ export default {
           ? addConfig(chatConfig)
           : updateConfig(chatConfig);
 
-      const saveFim = this.fimConfig==null
+      const saveFim = this.fimConfig.id==null
           ? addConfig(fimConfig)
           : updateConfig(fimConfig);
 

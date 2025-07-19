@@ -19,7 +19,7 @@ public class ChatModelProvider extends ModelProvider{
         chatModelProvider.setLabel("聊天模型");
         chatModelProvider.setType(ProviderType.CHAT);
         chatModelProvider.setOpenApiType(OpenApiType.OPENAI);
-        chatModelProvider.setModelName(ModeType.GPT_4_O_MINI);
+        chatModelProvider.setModelName("gpt-3.5-turbo");
         chatModelProvider.setHostName(Constants.HOST);
         chatModelProvider.setProtocol(ProtocolType.HTTP);
         chatModelProvider.setPort(Constants.PORT);

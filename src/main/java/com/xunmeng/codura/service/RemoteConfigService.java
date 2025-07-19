@@ -8,6 +8,7 @@ import com.xunmeng.codura.net.HttpClient;
 import com.xunmeng.codura.service.constant.ProviderType;
 import com.xunmeng.codura.setting.provider.*;
 import com.xunmeng.codura.setting.state.SystemInfoStateService;
+import com.xunmeng.codura.utils.RedisUtil;
 import okhttp3.Response;
 
 import java.util.*;
@@ -22,10 +23,9 @@ import static com.xunmeng.codura.service.RemoteConfigService.ConfigPaths.*;
 public class RemoteConfigService {
 
     private static final ObjectMapper mapper = new ObjectMapper();
-    private static final Map<String, Object> cache = new ConcurrentHashMap<>();
-    private static final Map<String, Long> lastFetchTime = new ConcurrentHashMap<>();
-    private static final long Provider_CACHE_TTL = 600_000L; // 600 秒
-    private static final long LLmGate_CACHE_TTL = 604_800_000L; // 一周
+
+    private static final int Provider_CACHE_TTL = 600;
+    private static final int LLmGate_CACHE_TTL = 604800;
 
     // 配置接口路径常量
     public static class ConfigPaths {
@@ -39,13 +39,12 @@ public class RemoteConfigService {
         public static final String Public_FIM_CONFIG_PATH = "/api/fimConfig/public";
         public static final String Public_MODEL_CONFIG_PATH = "/api/modelConfig/public";
 
-        public static final String LLMGATE_LOG_PATH = BASE_URL+"llmgate/llm-log/list";
+        public static final String LLMGATE_LOG_PATH = BASE_URL+"llmgate/llm-log/detail/";
 
         public static final String LLMGATE_CONFIG_PATH = BASE_URL + "config/llmgate";
     }
 
     // ========================== 公共方法 ==========================
-
 
 
     //获取后管配置
@@ -57,9 +56,13 @@ public class RemoteConfigService {
             String fullUrl;
             Map<String, String> headers = new HashMap<>();
 
-            if (user != null && user.getName() != null && !user.getName().trim().isEmpty()
-                    && user.getToken() != null && !user.getToken().trim().isEmpty()) {
-                // 已登录用户：请求私有配置
+            if (user != null
+                    && user.getName() != null && !user.getName().trim().isEmpty()
+                    && user.getToken() != null && !user.getToken().trim().isEmpty()
+                    && !(Public_CHAT_CONFIG_PATH.equals(path)
+                    || Public_FIM_CONFIG_PATH.equals(path)
+                    || Public_MODEL_CONFIG_PATH.equals(path))) {
+                // 有 user 且不是访问公共路径 → 拼接私有接口
                 fullUrl = baseUrl + path + user.getName();
                 headers.put("Authorization", "Bearer " + user.getToken());
             } else {
@@ -101,6 +104,12 @@ public class RemoteConfigService {
     public static <T> T fetchConfig(String path, Class<T> clazz) {
         return fetchConfig(path, node -> {
             try {
+                if (node == null || node.isNull()) {
+                    return null;
+                }
+                if (node.isArray() && node.size() == 0) {
+                    return null;
+                }
                 return mapper.treeToValue(node, clazz);
             } catch (JsonProcessingException e) {
                 e.printStackTrace();
@@ -108,42 +117,94 @@ public class RemoteConfigService {
             }
         });
     }
+    private static String getCurrentUserKey() {
+        User user = SystemInfoStateService.settings().getUserInfoProvider().getUser();
+        if (user != null && user.getName() != null && !user.getName().trim().isEmpty()) {
+            return "user:" + user.getName();
+        } else {
+            //默认调用
+            return "user:admin";
+        }
+    }
+    public static <T> T fetchCachedConfig(String cacheKey, int ttlSeconds, Supplier<T> supplier, Class<T> clazz) {
+        String userKey = getCurrentUserKey();
+        String redisKey = userKey + ":" + cacheKey;
 
-    public static <T> T fetchCachedConfig(String cacheKey, long ttlMillis, Supplier<T> supplier) {
-        long now = System.currentTimeMillis();
-        if (!cache.containsKey(cacheKey) || now - lastFetchTime.getOrDefault(cacheKey, 0L) > ttlMillis) {
-            T value = supplier.get();
-            if (value != null) {
-                cache.put(cacheKey, value);
-                lastFetchTime.put(cacheKey, now);
+        try {
+            String json = RedisUtil.get(redisKey);
+            if (json != null) {
+                return mapper.readValue(json, clazz);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // 缓存未命中，调用 supplier
+        T value = supplier.get();
+        if (value != null) {
+            try {
+                String json = mapper.writeValueAsString(value);
+                RedisUtil.set(redisKey, json, ttlSeconds);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
-        return (T) cache.get(cacheKey);
+        return value;
     }
 
 
     // ========================== 具体配置获取 ==========================
 
     public static CompletionConfigProvider fetchCompletionConfig() {
-        return fetchConfig(ConfigPaths.FIM_CONFIG_PATH, CompletionConfigProvider.class);
-    }
+        CompletionConfigProvider config = fetchConfig(ConfigPaths.FIM_CONFIG_PATH, CompletionConfigProvider.class);
 
-    public static CompletionConfigProvider fetchCompletionConfigCached() {
-        return fetchCachedConfig("completionConfig", Provider_CACHE_TTL,RemoteConfigService::fetchCompletionConfig);
+        if (config == null) {
+            config = fetchConfig(ConfigPaths.Public_FIM_CONFIG_PATH, CompletionConfigProvider.class);
+        }
+
+        return config;
     }
 
     public static ChatConfigProvider fetchChatConfig() {
-        return fetchConfig(ConfigPaths.CHAT_CONFIG_PATH, ChatConfigProvider.class);
-    }
-
-    public static ChatConfigProvider fetchChatConfigCached() {
-        return fetchCachedConfig("chatConfig", Provider_CACHE_TTL,RemoteConfigService::fetchChatConfig);
+        ChatConfigProvider config = fetchConfig(ConfigPaths.CHAT_CONFIG_PATH, ChatConfigProvider.class);
+        if (config == null) {
+            config = fetchConfig(ConfigPaths.Public_CHAT_CONFIG_PATH, ChatConfigProvider.class);
+        }
+        return config;
     }
 
     public static List<ModelProvider> fetchModelProviders() {
-        return fetchConfig(ConfigPaths.MODEL_CONFIG_PATH, node -> {
+        List<ModelProvider> privateProviders = fetchConfig(ConfigPaths.MODEL_CONFIG_PATH, parseModelProviders());
+
+        boolean hasChat = privateProviders.stream().anyMatch(p -> p instanceof ChatModelProvider);
+        boolean hasFim  = privateProviders.stream().anyMatch(p -> p instanceof FimModelProvider);
+
+        if (!hasChat || !hasFim) {
+            System.out.println("私有配置缺失部分模型，尝试获取公共配置...");
+            List<ModelProvider> publicProviders = fetchConfig(ConfigPaths.Public_MODEL_CONFIG_PATH, parseModelProviders());
+
+            if (!hasChat) {
+                publicProviders.stream()
+                        .filter(p -> p instanceof ChatModelProvider)
+                        .findFirst()
+                        .ifPresent(privateProviders::add);
+            }
+
+            if (!hasFim) {
+                publicProviders.stream()
+                        .filter(p -> p instanceof FimModelProvider)
+                        .findFirst()
+                        .ifPresent(privateProviders::add);
+            }
+        }
+
+        return privateProviders;
+    }
+
+    private static Function<JsonNode, List<ModelProvider>> parseModelProviders() {
+        return node -> {
             List<ModelProvider> providers = new ArrayList<>();
-            if (node.isArray()) {
+            if (node != null && node.isArray()) {
                 for (JsonNode item : node) {
                     int businessType = item.path("businessType").asInt();
                     try {
@@ -165,8 +226,9 @@ public class RemoteConfigService {
                 }
             }
             return providers;
-        });
+        };
     }
+
 
     public static ChatModelProvider getChatModelProvider() {
         return fetchModelProviders().stream()
@@ -183,14 +245,19 @@ public class RemoteConfigService {
                 .findFirst()
                 .orElse(null);
     }
-
+    public static ChatConfigProvider fetchChatConfigCached() {
+        return fetchCachedConfig("chatConfig", Provider_CACHE_TTL, RemoteConfigService::fetchChatConfig, ChatConfigProvider.class);
+    }
+    public static CompletionConfigProvider fetchCompletionConfigCached() {
+        return fetchCachedConfig("completionConfig", Provider_CACHE_TTL, RemoteConfigService::fetchCompletionConfig, CompletionConfigProvider.class);
+    }
     public static ChatModelProvider getChatModelProviderCached() {
-        return fetchCachedConfig("chatModelProvider", Provider_CACHE_TTL,RemoteConfigService::getChatModelProvider);
+        return fetchCachedConfig("chatModelProvider", Provider_CACHE_TTL, RemoteConfigService::getChatModelProvider, ChatModelProvider.class);
+    }
+    public static FimModelProvider getFimModelProviderCached() {
+        return fetchCachedConfig("fimModelProvider", Provider_CACHE_TTL, RemoteConfigService::getFimModelProvider, FimModelProvider.class);
     }
 
-    public static FimModelProvider getFimModelProviderCached() {
-        return fetchCachedConfig("fimModelProvider",Provider_CACHE_TTL, RemoteConfigService::getFimModelProvider);
-    }
 
     //==============================网关=================
     //获取网关配置
@@ -217,35 +284,30 @@ public class RemoteConfigService {
         return null;
     }
     public static LlmGateConfigProvider fetchLlmGateConfigCached() {
-        return fetchCachedConfig("llmGateConfig",LLmGate_CACHE_TTL, RemoteConfigService::fetchLlmGateConfig);
+        return fetchCachedConfig(
+                "llmGateConfig",              // 全局共享 key
+                LLmGate_CACHE_TTL,                       // 1 周 TTL
+                RemoteConfigService::fetchLlmGateConfig,
+                LlmGateConfigProvider.class
+        );
     }
 
     public static LlmGateLogProvider fetchLogByRequestId(String requestId) {
-        User user = SystemInfoStateService.settings().getUserInfoProvider().getUser();
-        String token = (user != null && user.getToken() != null && !user.getToken().trim().isEmpty())
-                ? user.getToken()
-                : null;
+
 
         try {
-            Map<String, String> headers = new HashMap<>();
-            if (token != null) {
-                headers.put("Authorization", "Bearer " + token);
-            }
 
-            Map<String, Object> params = new HashMap<>();
-            params.put("requestId", requestId);
+            String path = LLMGATE_LOG_PATH+requestId;
 
-            Future<Response> future = HttpClient.request("GET", LLMGATE_LOG_PATH, headers, params, null);
+            Future<Response> future = HttpClient.request("GET", path, null, null, null);
             Response response = future.get();
 
             if (response.isSuccessful()) {
                 String json = response.body().string();
                 JsonNode root = mapper.readTree(json);
                 if (root.has("code") && root.get("code").asInt() == 200) {
-                    JsonNode rows = root.get("rows");
-                    if (rows != null && rows.isArray() && rows.size() > 0) {
-                        return mapper.treeToValue(rows.get(0), LlmGateLogProvider.class);
-                    }
+                    JsonNode res = root.get("data");
+                    return mapper.treeToValue(res, LlmGateLogProvider.class);
                 }
             }
         } catch (Exception e) {

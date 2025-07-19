@@ -21,8 +21,7 @@ dependencies{
     implementation("com.squareup.okhttp3:okhttp:4.9.1")
     implementation("org.apache.commons:commons-lang3:3.15.0")
     implementation("com.github.jknack:handlebars:4.4.0")
-
-
+    implementation( "redis.clients:jedis:5.1.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.23")
 }
 

@@ -1,9 +1,9 @@
 <template>
   <div class="app-container">
     <!-- 页面标题 -->
-    <el-divider content-position="left"><span style="font-size: 18px;">模型参数配置</span></el-divider>
+    <el-divider content-position="left" ><span style="font-size: 18px;">模型参数配置</span></el-divider>
 
-    <el-tabs v-model="activeTab" type="card">
+    <el-tabs v-model="activeTab" type="card" >
       <!-- 聊天模型配置 -->
       <el-tab-pane label="聊天模型配置" name="chat">
         <el-form :model="chatConfig" label-width="180px">
@@ -96,7 +96,7 @@ export default {
   name: 'ModelConfig',
   data() {
     return {
-
+      isLoading:false,
       activeTab: 'chat',
       chatConfig: {
         maxTokens: undefined,
@@ -121,6 +121,7 @@ export default {
   },
   methods: {
     init() {
+      this.isLoading = true;
       const userName = this.$store.state.user.name;
       Promise.all([
         getChatConfigByUserName(userName),
@@ -130,40 +131,46 @@ export default {
             const chatData = chatRes.data;
             const fimData = fimRes.data;
 
-            // 判断当前用户是否有配置
-            const hasChat = !!chatData;
-            const hasFim = !!fimData;
-
             const adminPromises = [];
 
-            if (!hasChat) {
+            if (!chatData) {
               adminPromises.push(
                   getChatConfigByUserName('admin').then(res => {
-                    this.chatConfig = { ...this.chatConfig, ...res.data };
+                    // 用 admin 配置当默认，但去掉 id，加上当前用户
+                    this.chatConfig = { ...res.data, id: null, userName };
                   })
               );
             } else {
-              this.chatConfig = { ...this.chatConfig, ...chatData };
+              this.chatConfig = { ...chatData };
             }
 
-            if (!hasFim) {
+            if (!fimData) {
               adminPromises.push(
                   getFimConfigByUserName('admin').then(res => {
-                    this.fimConfig = { ...this.fimConfig, ...res.data };
+                    this.fimConfig = { ...res.data, id: null, userName };
                   })
               );
             } else {
-              this.fimConfig = { ...this.fimConfig, ...fimData };
+              this.fimConfig = { ...fimData };
             }
 
-            // 如果需要从 admin 加载，就等这些 promise 执行完
             return Promise.all(adminPromises);
           })
           .catch(() => {
-            // 用户请求出错，全部退回 admin
-            return this.getUserConfig('admin');
+            // 出错时也加载 admin 配置当默认（并去 id）
+            return this.getUserConfig('admin').then(() => {
+              this.chatConfig.id = null;
+              this.chatConfig.userName = userName;
+              this.fimConfig.id = null;
+              this.fimConfig.userName = userName;
+            });
           })
+          .finally(() => {
+            this.isLoading = false;
+          });
     },
+
+
 
     getUserConfig(userName) {
       return Promise.all([
@@ -187,7 +194,7 @@ export default {
       const now = parseTime(new Date());
       const chatConfig = { ...this.chatConfig, updateTime: now };
       const fimConfig = { ...this.fimConfig, updateTime: now };
-      console.log(chatConfig);
+      // console.log(chatConfig);
       const saveFim = this.fimConfig.id == null
           ? addFimConfig(fimConfig)
           : updateFimConfig(fimConfig);

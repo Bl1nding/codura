@@ -29,7 +29,10 @@ public class AiUseLogAPI {
 
         /*判断是否有token*/
         // todo WIN:UserNotLoginInError
-        if (token == null || token.equals("")) return null;
+        if (token == null || token.equals(""))
+            return null;
+
+        
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Bearer " + token);
         //构建请求参数

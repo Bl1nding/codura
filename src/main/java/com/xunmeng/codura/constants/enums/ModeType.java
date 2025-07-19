@@ -22,6 +22,10 @@ public enum ModeType implements Type {
     QWEN_CODER_2_5_1P5B("Qwen2.5-Coder-1.5B"),
     QWEN_CODER_2_5_7B("Qwen2.5-Coder-7B"),
     QWEN_CODER_2_5_32B("Qwen2.5-Coder-32B"),
+
+    QWEN3_32B("qwen3-32b"),
+
+
     DEEPSEEK_R1("deepseek-reasoner"),
     DEEPSEEK_CHAT("deepseek-chat"),
     DEEPSEEK_V3("deepseek-v3"),

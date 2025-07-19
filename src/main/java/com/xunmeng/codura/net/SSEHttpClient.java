@@ -4,7 +4,14 @@ package com.xunmeng.codura.net;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xunmeng.codura.net.resquest.StreamResquest;
+import com.xunmeng.codura.setting.state.SystemInfoStateService;
+import com.xunmeng.codura.toolwin.CodeToolWindowFactory;
+import com.xunmeng.codura.toolwin.sharedchat.SharedChatPane;
+import com.xunmeng.codura.toolwin.sharedchat.browser.ChatWebView;
+import com.xunmeng.codura.utils.NotifyUtils;
 import okhttp3.*;
+import okio.Timeout;
+import org.apache.commons.lang3.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedReader;
@@ -13,6 +20,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+
 
 public class SSEHttpClient {
 
@@ -35,7 +44,25 @@ public class SSEHttpClient {
     }
 
     private Call createCall() {
+        String token = SystemInfoStateService.settings().getUserInfoProvider().getUser().getToken();
+        // TODO 防止用户未登录就可以使用
+        if (ObjectUtils.isEmpty(token)){
+            NotifyUtils.warning("用户未登录");
+            call=new EmptyCall();
 
+            streamResquest.getResponseCallable().onError(new Throwable("用户未登录"));
+//            /app/code-chat/login
+            SharedChatPane chatPane = CodeToolWindowFactory.getCurrentFocusChatPane();
+            if (ObjectUtils.isNotEmpty(chatPane)){
+                ChatWebView browser = chatPane.getBrowser();
+                if (ObjectUtils.isNotEmpty(browser)){
+                    String url= SystemInfoStateService.settings().getSystemInfoProvider().getRequestBaseUrl()+"/code-chat/login";
+                    browser.switchUrl(url);
+                }
+            }
+
+            return call;
+        }
         String url = "%s://%s:%s%s".formatted(
                 streamResquest.getOptions().getProtocol(),
                 streamResquest.getOptions().getHostname(),
@@ -65,6 +92,7 @@ public class SSEHttpClient {
                 .readTimeout(300, TimeUnit.SECONDS)      // 设置读取超时
                 .build();
         Call call = client.newCall(request);
+
         call.enqueue(new Callback() {
             @Override
             public void onFailure(@NotNull Call call, @NotNull IOException e) {
@@ -171,6 +199,43 @@ public class SSEHttpClient {
                 // 取消执行
                 call.cancel();
             }
+        }
+    }
+
+    public class EmptyCall implements Call {
+        private final Request request = new Request.Builder().url("http://localhost/empty").build();
+
+        @Override
+        public Request request() {
+            return request;
+        }
+
+        @Override
+        public Response execute() throws IOException {
+            throw new UnsupportedOperationException("EmptyCall cannot execute");
+        }
+
+        @Override
+        public void enqueue(Callback responseCallback) {
+            responseCallback.onFailure(this, new IOException("EmptyCall: Request skipped"));
+        }
+
+        @Override
+        public void cancel() {}
+
+        @Override
+        public boolean isExecuted() { return true; }
+
+        @Override
+        public boolean isCanceled() { return true; }
+
+        @Override
+        public Call clone() { return this; }
+
+        @NotNull
+        @Override
+        public Timeout timeout() {
+            return null;
         }
     }
 }

@@ -9,7 +9,6 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.xunmeng.codura.constants.Constants;
 import com.xunmeng.codura.constants.Languages;
-import com.xunmeng.codura.constants.enums.ModeType;
 import com.xunmeng.codura.net.SSEHttpClient;
 import com.xunmeng.codura.net.constants.Method;
 import com.xunmeng.codura.net.options.RequestOptions;
@@ -23,9 +22,7 @@ import com.xunmeng.codura.pojo.LanguageType;
 import com.xunmeng.codura.setting.provider.ChatConfigProvider;
 import com.xunmeng.codura.setting.provider.ChatModelProvider;
 import com.xunmeng.codura.setting.provider.LlmGateConfigProvider;
-import com.xunmeng.codura.setting.provider.ModelProvider;
 import com.xunmeng.codura.setting.state.CodeState;
-import com.xunmeng.codura.setting.state.CodeStateService;
 import com.xunmeng.codura.system.logs.LogExecutor;
 import com.xunmeng.codura.system.logs.constans.AIUsageType;
 import com.xunmeng.codura.toolwin.CodeToolWindowFactory;
@@ -196,8 +193,8 @@ public final class ChatService {
         ChatModelProvider provider= RemoteConfigService.getChatModelProviderCached();
         LlmGateConfigProvider llmgate = RemoteConfigService.fetchLlmGateConfigCached();
 
-        ModeType modelName = provider.getModelName();
-        requestBody.setModel(modelName.V().toString());
+        String modelName = provider.getModelName();
+        requestBody.setModel(modelName);
         requestBody.setMax_tokens(chatConfigProvider.getNumPredict());
         requestBody.setTemperature(chatConfigProvider.getTemperature());
         //标记请求

@@ -33,14 +33,14 @@ public class ChatConfigController extends BaseController {
     @GetMapping("/user/{userName}")
     public AjaxResult getByUserName(@PathVariable String userName) {
         ChatConfig config = configService.getByUserName(userName);
-        return config != null ? AjaxResult.success(config) : AjaxResult.error("未找到配置");
+        return AjaxResult.success(config) ;
     }
     @ApiOperation("获取公共模型配置（匿名访问）")
     @Anonymous
     @GetMapping("/public")
     public AjaxResult getPublicConfig() {
         ChatConfig config = configService.getByUserName("admin");
-        return config != null ? AjaxResult.success(config) : AjaxResult.error("未找到配置");
+        return AjaxResult.success(config) ;
     }
     @ApiOperation("修改模型配置")
     @Log(title = "模型服务配置", businessType = BusinessType.UPDATE)

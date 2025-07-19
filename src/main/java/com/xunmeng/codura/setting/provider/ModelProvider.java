@@ -21,7 +21,7 @@ public class ModelProvider implements Provider {
     private ProviderType Type;
     @UIComponent(label = "模型名称",componentType = ComponentType.JCOMBOBOX,tabs = ModeType.class,order = 2)
     @JsonProperty("modelName")
-    private ModeType modelName;
+    private String modelName;
     @UIComponent(label = "openapi类型",componentType = ComponentType.JCOMBOBOX,tabs = OpenApiType.class)
     @JsonProperty("openaiType")
     private OpenApiType openApiType;

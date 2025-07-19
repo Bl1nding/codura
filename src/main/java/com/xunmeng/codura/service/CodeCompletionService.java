@@ -20,7 +20,6 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.xunmeng.codura.constants.*;
 import com.xunmeng.codura.constants.enums.FimTemplateType;
-import com.xunmeng.codura.constants.enums.ModeType;
 import com.xunmeng.codura.editor.CodeDefaultInlayRenderer;
 import com.xunmeng.codura.editor.InlayUtils;
 import com.xunmeng.codura.llm.openai.message.Message;
@@ -245,8 +244,8 @@ public final class CodeCompletionService {
 
     private StreamResquest buildCompletionStreamRequest(String prompt, FimModelProvider provider) {
         StreamRequestBodyCompletionOpenAI requestBody = new StreamRequestBodyCompletionOpenAI();
-        ModeType modelName = provider.getModelName();
-        requestBody.setModel(modelName.V().toString());
+        String modelName = provider.getModelName();
+        requestBody.setModel(modelName);
         requestBody.setMax_tokens(completionConfigProvider.getNumPredictFim());
         requestBody.setTemperature(completionConfigProvider.getTemperature());
         requestBody.setPrompt(prompt);
@@ -279,8 +278,8 @@ public final class CodeCompletionService {
                 )
         );
         StreamRequestBodyChatOpenAI requestBody = new StreamRequestBodyChatOpenAI(messageList);
-        ModeType modelName = provider.getModelName();
-        requestBody.setModel(modelName.V().toString());
+        String modelName = provider.getModelName();
+        requestBody.setModel(modelName);
         requestBody.setMax_tokens(completionConfigProvider.getNumPredictFim());
         requestBody.setTemperature(completionConfigProvider.getTemperature());
 
