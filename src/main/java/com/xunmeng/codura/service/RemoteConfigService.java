@@ -27,10 +27,13 @@ public class RemoteConfigService {
     private static final int Provider_CACHE_TTL = 600;
     private static final int LLmGate_CACHE_TTL = 604800;
 
+    private static final int LLmGateUrl_CACHE_TTL = 604800*4;
+
     // 配置接口路径常量
     public static class ConfigPaths {
-        public static final String BASE_URL = "http://127.0.0.1:8080/"; //网关后端
 
+
+        public static final String LLMGATE_URL_CONFIG = "/api/config/llmgate";
         public static final String CHAT_CONFIG_PATH = "/api/chatConfig/user/";
         public static final String FIM_CONFIG_PATH = "/api/fimConfig/user/";
         public static final String MODEL_CONFIG_PATH = "/api/modelConfig/user/";
@@ -39,9 +42,9 @@ public class RemoteConfigService {
         public static final String Public_FIM_CONFIG_PATH = "/api/fimConfig/public";
         public static final String Public_MODEL_CONFIG_PATH = "/api/modelConfig/public";
 
-        public static final String LLMGATE_LOG_PATH = BASE_URL+"llmgate/llm-log/detail/";
+        public static final String LLMGATE_LOG_PATH = "/llmgate/llm-log/detail/";
 
-        public static final String LLMGATE_CONFIG_PATH = BASE_URL + "config/llmgate";
+        public static final String LLMGATE_CONFIG_PATH = "/config/llmgate";
     }
 
     // ========================== 公共方法 ==========================
@@ -128,7 +131,13 @@ public class RemoteConfigService {
     }
     public static <T> T fetchCachedConfig(String cacheKey, int ttlSeconds, Supplier<T> supplier, Class<T> clazz) {
         String userKey = getCurrentUserKey();
-        String redisKey = userKey + ":" + cacheKey;
+        String redisKey = "";
+        if("llmGateConfig".equals(cacheKey)||"llmGateUrl".equals(cacheKey)){
+            redisKey = cacheKey ;
+        } else{
+            redisKey = userKey + ":" + cacheKey;
+        }
+
 
         try {
             String json = RedisUtil.get(redisKey);
@@ -246,15 +255,31 @@ public class RemoteConfigService {
                 .orElse(null);
     }
     public static ChatConfigProvider fetchChatConfigCached() {
+        if (!RedisUtil.ensureConnected()) {
+            // 连接失败，直接调用真实接口，不用缓存
+            return RemoteConfigService.fetchChatConfig();
+        }
         return fetchCachedConfig("chatConfig", Provider_CACHE_TTL, RemoteConfigService::fetchChatConfig, ChatConfigProvider.class);
     }
     public static CompletionConfigProvider fetchCompletionConfigCached() {
+        if (!RedisUtil.ensureConnected()) {
+            // 连接失败，直接调用真实接口，不用缓存
+            return RemoteConfigService.fetchCompletionConfig();
+        }
         return fetchCachedConfig("completionConfig", Provider_CACHE_TTL, RemoteConfigService::fetchCompletionConfig, CompletionConfigProvider.class);
     }
     public static ChatModelProvider getChatModelProviderCached() {
+        if (!RedisUtil.ensureConnected()) {
+            // 连接失败，直接调用真实接口，不用缓存
+            return RemoteConfigService.getChatModelProvider();
+        }
         return fetchCachedConfig("chatModelProvider", Provider_CACHE_TTL, RemoteConfigService::getChatModelProvider, ChatModelProvider.class);
     }
     public static FimModelProvider getFimModelProviderCached() {
+        if (!RedisUtil.ensureConnected()) {
+            // 连接失败，直接调用真实接口，不用缓存
+            return RemoteConfigService.getFimModelProvider();
+        }
         return fetchCachedConfig("fimModelProvider", Provider_CACHE_TTL, RemoteConfigService::getFimModelProvider, FimModelProvider.class);
     }
 
@@ -263,10 +288,9 @@ public class RemoteConfigService {
     //获取网关配置
     public static LlmGateConfigProvider fetchLlmGateConfig() {
         try {
-
-            Map<String, String> headers = new HashMap<>();
-
-            Future<Response> future = HttpClient.request("GET", LLMGATE_CONFIG_PATH, headers, null, null);
+            String baseUrl = RemoteConfigService.fetchLlmGateUrlCached().getBaseUrl();
+            String path = baseUrl+LLMGATE_CONFIG_PATH;
+            Future<Response> future = HttpClient.request("GET", path, null, null, null);
             Response response = future.get(); // 阻塞获取
 
             if (response.isSuccessful()) {
@@ -284,6 +308,10 @@ public class RemoteConfigService {
         return null;
     }
     public static LlmGateConfigProvider fetchLlmGateConfigCached() {
+        if (!RedisUtil.ensureConnected()) {
+            // 连接失败，直接调用真实接口，不用缓存
+            return RemoteConfigService.fetchLlmGateConfig();
+        }
         return fetchCachedConfig(
                 "llmGateConfig",              // 全局共享 key
                 LLmGate_CACHE_TTL,                       // 1 周 TTL
@@ -296,8 +324,8 @@ public class RemoteConfigService {
 
 
         try {
-
-            String path = LLMGATE_LOG_PATH+requestId;
+            String baseUrl = RemoteConfigService.fetchLlmGateUrlCached().getBaseUrl();
+            String path = baseUrl+LLMGATE_LOG_PATH+requestId;
 
             Future<Response> future = HttpClient.request("GET", path, null, null, null);
             Response response = future.get();
@@ -315,6 +343,42 @@ public class RemoteConfigService {
         }
 
         return null;
+    }
+
+    //获取网关ip等信息
+    public static LlmGateUrlProvider fetchLlmGateUrl() {
+        try {
+            String baseUrl = SystemInfoStateService.settings().getSystemInfoProvider().getRequestBaseUrl();
+            String path = baseUrl+LLMGATE_URL_CONFIG;
+            Future<Response> future = HttpClient.request("GET", path, null, null, null);
+            Response response = future.get(); // 阻塞获取
+
+            if (response.isSuccessful()) {
+                String json = response.body().string();
+                JsonNode root = mapper.readTree(json);
+                return mapper.treeToValue(root, LlmGateUrlProvider.class);
+
+            } else {
+                System.err.println("HTTP 请求失败：" + response.code() + " " + response.message());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
+    public static LlmGateUrlProvider fetchLlmGateUrlCached() {
+        if (!RedisUtil.ensureConnected()) {
+            // 连接失败，直接调用真实接口，不用缓存
+            return RemoteConfigService.fetchLlmGateUrl();
+        }
+        return fetchCachedConfig(
+                "llmGateUrl",              // 全局共享 key
+                LLmGateUrl_CACHE_TTL,                       // 4 周 TTL
+                RemoteConfigService::fetchLlmGateUrl,
+                LlmGateUrlProvider.class
+        );
     }
 }
 

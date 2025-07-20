@@ -38,6 +38,7 @@ import com.xunmeng.codura.pojo.PrefixSuffix;
 import com.xunmeng.codura.setting.provider.CompletionConfigProvider;
 import com.xunmeng.codura.setting.provider.FimModelProvider;
 import com.xunmeng.codura.setting.provider.LlmGateConfigProvider;
+import com.xunmeng.codura.setting.provider.LlmGateUrlProvider;
 import com.xunmeng.codura.setting.state.CodeStateService;
 import com.xunmeng.codura.status.CodeStatus;
 import com.xunmeng.codura.status.CodeStatusService;
@@ -244,6 +245,8 @@ public final class CodeCompletionService {
 
     private StreamResquest buildCompletionStreamRequest(String prompt, FimModelProvider provider) {
         StreamRequestBodyCompletionOpenAI requestBody = new StreamRequestBodyCompletionOpenAI();
+
+
         String modelName = provider.getModelName();
         requestBody.setModel(modelName);
         requestBody.setMax_tokens(completionConfigProvider.getNumPredictFim());
@@ -254,9 +257,13 @@ public final class CodeCompletionService {
         requestId = UUID.randomUUID().toString();
         requestBody.setRequestId(requestId);
 
+        LlmGateUrlProvider llmGateUrl = RemoteConfigService.fetchLlmGateUrlCached();
+        String host = llmGateUrl.getHost();
+        String protocol = llmGateUrl.getProtocol();
+
         RequestOptions options = new RequestOptions();
-        options.setHostname(provider.getHostName())
-                .setProtocol(provider.getProtocol().V().toString())
+        options.setHostname(host)
+                .setProtocol(protocol)
                 .setPort(provider.getPort())
                 .setPath(provider.getPath())
                 .setMethod(Method.POST)
@@ -288,11 +295,16 @@ public final class CodeCompletionService {
         requestBody.setRequestId(requestId);
         //获取网关配置
         LlmGateConfigProvider llmgate = RemoteConfigService.fetchLlmGateConfigCached();
+        LlmGateUrlProvider llmGateUrl = RemoteConfigService.fetchLlmGateUrlCached();
+        String host = llmGateUrl.getHost();
+        String protocol = llmGateUrl.getProtocol();
         int port = llmgate.getServer().getPort();
         String path = llmgate.getServer().getPrefix()+ provider.getPath();
         RequestOptions options = new RequestOptions();
-        options.setHostname(provider.getHostName())
-                .setProtocol(provider.getProtocol().V().toString())
+
+
+        options.setHostname(host)
+                .setProtocol(protocol)
                 .setPort(port)
                 .setPath(path)
                 .setMethod(Method.POST)

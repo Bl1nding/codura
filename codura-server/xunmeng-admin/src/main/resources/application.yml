@@ -125,3 +125,12 @@ swagger:
   url: http://localhost/doc.html
   email: 3339372755@qq.com
   version: 3.0
+
+
+llmgate:
+  host: 127.0.0.1
+  port: 8081
+  prefix: /_api
+  protocol: http
+  redisPassword: "123456"
+  redisPort: 6379

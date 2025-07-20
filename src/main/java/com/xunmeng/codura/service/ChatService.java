@@ -22,7 +22,9 @@ import com.xunmeng.codura.pojo.LanguageType;
 import com.xunmeng.codura.setting.provider.ChatConfigProvider;
 import com.xunmeng.codura.setting.provider.ChatModelProvider;
 import com.xunmeng.codura.setting.provider.LlmGateConfigProvider;
+import com.xunmeng.codura.setting.provider.LlmGateUrlProvider;
 import com.xunmeng.codura.setting.state.CodeState;
+import com.xunmeng.codura.setting.state.SystemInfoStateService;
 import com.xunmeng.codura.system.logs.LogExecutor;
 import com.xunmeng.codura.system.logs.constans.AIUsageType;
 import com.xunmeng.codura.toolwin.CodeToolWindowFactory;
@@ -192,6 +194,7 @@ public final class ChatService {
 
         ChatModelProvider provider= RemoteConfigService.getChatModelProviderCached();
         LlmGateConfigProvider llmgate = RemoteConfigService.fetchLlmGateConfigCached();
+        LlmGateUrlProvider llmGateUrl = RemoteConfigService.fetchLlmGateUrlCached();
 
         String modelName = provider.getModelName();
         requestBody.setModel(modelName);
@@ -205,9 +208,11 @@ public final class ChatService {
         //获取网关配置
         int port = llmgate.getServer().getPort();
         String path = llmgate.getServer().getPrefix()+ provider.getPath();
+        String host = llmGateUrl.getHost();
+        String protocol = llmGateUrl.getProtocol();
 
-        options.setHostname(provider.getHostName())
-                .setProtocol(provider.getProtocol().V().toString())
+        options.setHostname(host)
+                .setProtocol(protocol)
                 .setPort(port)
                 .setPath(path)
                 .setMethod(Method.POST)
